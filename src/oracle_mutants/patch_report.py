@@ -17,7 +17,7 @@ def read_object(path: Path) -> dict:
     except (OSError, ValueError) as exc:
         raise ValueError(f"Could not read {path}: {exc}") from exc
     if not isinstance(data, dict):
-        raise ValueError(f"{path}: expected a JSON object")
+        raise TypeError(f"{path}: expected a JSON object")
     return data
 
 
@@ -27,7 +27,7 @@ def _has_text(value: object) -> bool:
 
 def _rows_by_id(rows: object, id_key: str) -> dict[str, dict]:
     if not isinstance(rows, list):
-        raise ValueError(f"Expected an array of records with {id_key}")
+        raise TypeError(f"Expected an array of records with {id_key}")
     by_id = {}
     for row in rows:
         if not isinstance(row, dict) or not _has_text(row.get(id_key)):
@@ -46,7 +46,7 @@ def _load_candidates(manifest: dict) -> dict[str, dict]:
         if not _has_text(manifest.get(key)):
             raise ValueError(f"Missing {key} in the patch manifest")
     if not isinstance(manifest.get("generators"), dict):
-        raise ValueError("Missing generators object in the patch manifest")
+        raise TypeError("Missing generators object in the patch manifest")
 
     candidates = _rows_by_id(manifest.get("candidates"), "id")
     for identifier, case in candidates.items():
@@ -142,11 +142,15 @@ def _outcome(case: dict, grade: dict, reference_tests: list[dict] | None) -> tup
         if reward == 1:
             return "alternative_accepted", "Saved valid alternative earned full reward"
         return "alternative_rejected", "Saved valid alternative lost reward. Review for verifier overconstraint"
+    expected = set(case["expected_failed_tests"])
+    reference_passes = {test["name"] for test in reference_tests if test["status"] == "passed"}
+    if unproven := sorted(expected - reference_passes):
+        return "inconclusive", f"Expected tests did not pass on the reference: {', '.join(unproven)}"
     if reward == 1:
         return "regression_survived", "Saved functional regression earned full reward"
 
     failed = {test["name"] for test in grade["tests"] if test["status"] == "failed"}
-    missing_failures = sorted(set(case["expected_failed_tests"]) - failed)
+    missing_failures = sorted(expected - failed)
     if missing_failures:
         return "inconclusive", f"Reduced reward without the expected failures: {', '.join(missing_failures)}"
     return "regression_caught", "Saved functional regression was rejected with the expected test evidence"

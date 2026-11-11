@@ -27,7 +27,7 @@ DIFF = ("diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color")
 
 def _git(cwd: Path, *args: str, patch: bytes | None = None) -> bytes:
     env = {
-        **os.environ,
+        **{key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
         "GIT_CONFIG_NOSYSTEM": "1",
         "GIT_CONFIG_GLOBAL": os.devnull,
         "GIT_LITERAL_PATHSPECS": "1",
@@ -36,7 +36,7 @@ def _git(cwd: Path, *args: str, patch: bytes | None = None) -> bytes:
     }
     proc = subprocess.run(
         ["git", "-c", f"core.hooksPath={os.devnull}", "-c", "core.autocrlf=false", "-C", str(cwd), *args],
-        input=patch, capture_output=True, env=env,
+        input=patch, capture_output=True, env=env, check=False,
     )
     if proc.returncode:
         raise ValueError(f"git {args[0]} failed: {proc.stderr.decode(errors='replace').strip()}")
@@ -91,7 +91,7 @@ def _config(path: Path | None) -> tuple[list[dict], list[dict]]:
     cases = config.get("cases", [])
     recipes = config.get("recipes", [])
     if not isinstance(cases, list) or not isinstance(recipes, list):
-        raise ValueError("cases and recipes must be arrays")
+        raise TypeError("cases and recipes must be arrays")
     for recipe in recipes:
         if (not isinstance(recipe, dict) or set(recipe) != {"path", "assignment"}
                 or any(not isinstance(v, str) or not v.strip() for v in recipe.values())):
@@ -100,7 +100,7 @@ def _config(path: Path | None) -> tuple[list[dict], list[dict]]:
     loaded = []
     for row in cases:
         if not isinstance(row, dict):
-            raise ValueError("each saved case must be an object")
+            raise TypeError("each saved case must be an object")
         kind, label, relative = row.get("kind"), row.get("label"), row.get("patch")
         tests = row.get("expected_failed_tests", [])
         if kind not in ("regression", "alternative") or not isinstance(label, str) or not label.strip():
@@ -161,7 +161,7 @@ def _source_mutations(sources: list[dict], recipes: list[dict]) -> tuple[list[di
         try:
             proc = subprocess.run(
                 ["node", str(JS_TOOL / "generate.mjs")],
-                input=json.dumps({"files": js, "recipes": recipes}), capture_output=True, text=True,
+                input=json.dumps({"files": js, "recipes": recipes}), capture_output=True, text=True, check=False,
             )
         except FileNotFoundError as exc:
             raise ValueError("Node.js is required for JavaScript and TypeScript mutations") from exc
@@ -198,6 +198,9 @@ def plan_patches(
     """Write remote regrade inputs and their manifest without executing task code."""
     if max_mutants < 0:
         raise ValueError("--max-mutants must be zero or greater")
+    task, out = task.resolve(), out.resolve()
+    if any(out.is_relative_to(task / directory) for directory in ("environment", "solution", "tests")):
+        raise ValueError("--out must be outside the task's environment, solution, and tests directories")
     config = tomllib.loads(_required(task / "task.toml").read_text())
     metadata = config.get("metadata")
     base = metadata.get("base_commit") if isinstance(metadata, dict) else None

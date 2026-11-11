@@ -152,3 +152,20 @@ def test_verifier_changes_change_candidate_identity(tmp_path):
     assert before["verifier_digest"] != after["verifier_digest"]
     assert before["candidates"][0]["id"] != after["candidates"][0]["id"]
     assert before["candidates"][0]["patch_sha256"] == after["candidates"][0]["patch_sha256"]
+
+
+def test_plan_ignores_git_hook_context(tmp_path, monkeypatch):
+    task, source, _ = task_with_bundle(tmp_path, {"logic.py": ("x = 1\n", "x = 2\n")})
+    monkeypatch.setenv("GIT_DIR", str(source / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(source))
+    out = tmp_path / "batch"
+    assert main(["plan-patches", str(task), "--out", str(out)]) == 0
+    assert (source / "logic.py").read_text() == "x = 1\n"
+
+
+def test_plan_rejects_output_inside_task_inputs(tmp_path, capsys):
+    task, _, _ = task_with_bundle(tmp_path, {"logic.py": ("x = 1\n", "x = 2\n")})
+    out = task / "tests" / "reports"
+    assert main(["plan-patches", str(task), "--out", str(out)]) == 2
+    assert "outside the task" in capsys.readouterr().err
+    assert not out.exists()

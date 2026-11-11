@@ -166,3 +166,16 @@ def test_report_rejects_invalid_id_sets(tmp_path, cases, rows, message):
     with pytest.raises(ValueError, match=message):
         write_patch_report(manifest, grades, out)
     assert not out.exists()
+
+
+def test_regression_requires_reference_to_pass_expected_test(tmp_path):
+    reference_tests = [{"name": TEST_NAMES[0], "status": "passed"}, {"name": TEST_NAMES[1], "status": "skipped"}]
+    code, report, _ = run_report(
+        tmp_path,
+        [candidate("reference", "reference"), candidate("probe", "regression", [TEST_NAMES[1]])],
+        [grade("reference", tests=reference_tests), grade("probe", 0, (TEST_NAMES[1],))],
+    )
+
+    assert code == 2
+    assert report["results"][1]["status"] == "inconclusive"
+    assert "Expected tests did not pass on the reference" in report["results"][1]["reason"]

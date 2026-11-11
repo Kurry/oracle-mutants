@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
             status = write_patch_report(args.manifest, args.grades, args.out)
             print(f"Report: {args.out / 'patch-report.md'}")
             return status
-        except (OSError, ValueError) as error:
+        except (OSError, TypeError, ValueError) as error:
             print(f"error: {error}", file=sys.stderr)
             return 2
     if args.cmd == "summarize":
