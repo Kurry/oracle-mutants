@@ -101,6 +101,82 @@ fact for an earlier run.
 
 The exit code is `1` when a strong mutant survives, so it can gate CI for new task pull requests.
 
+## Source-patch tasks with a remote verifier
+
+Use this workflow for Harbor tasks that submit a code patch. The task supplies
+`[metadata].base_commit` in `task.toml`, a materialized `environment/repo.bundle`, and
+`solution/solution.patch`. Use the same task directory and effective tests you intend to grade.
+
+From a checkout of this fork, install the Python CLI. For JavaScript or TypeScript generation,
+also install the pinned Stryker tooling with Node.js 18 or later.
+
+```bash
+uv sync
+npm ci --prefix src/oracle_mutants/js --ignore-scripts
+uv run oracle-mutants plan-patches /path/to/task --out /path/to/private-batch
+```
+
+Planning applies the reference in a temporary checkout and generates variants from its changed
+production lines. It uses the Python AST operators for Python and StrykerJS for JS/TS. By default it
+exports up to 12 generated candidates, plus the reference and any saved cases. Use `--max-mutants 0`
+for a batch containing only the reference and saved cases. Planning and reporting run without
+building the task image or executing task code.
+
+Pass `--cases /path/to/cases.json` to add saved full patches against the original base or an optional
+mutation recipe. Patch paths are relative to the cases file.
+
+```json
+{
+  "cases": [
+    {
+      "kind": "regression",
+      "label": "Failed save leaves the displayed value stale",
+      "patch": "stale-display.patch",
+      "expected_failed_tests": ["shows the persisted value after recovery"]
+    },
+    {
+      "kind": "alternative",
+      "label": "Uses a reducer to apply the saved response",
+      "patch": "reducer.patch"
+    }
+  ],
+  "recipes": [
+    { "path": "src/editor.ts", "assignment": "this.title.text" }
+  ]
+}
+```
+
+The recipe finds a changed assignment that uses a local value resolved by a conditional fallback.
+It uses the raw input from the conditional's alternate branch at that assignment. Other uses of the
+resolved value, such as the save request, are preserved. Ambiguous or unsupported assignments
+produce an input error. `expected_failed_tests` is optional for saved regressions and uses the
+verifier's exact reported names.
+
+Use the generated `changes.json` with your authorized remote grader. In a SWE-Enterprise template
+checkout with access to the deployed runner, the replay command is:
+
+```bash
+scripts/modal/ci_run regrade \
+  --task-dir /path/to/task \
+  --attempts /path/to/private-batch/changes.json \
+  --out /path/to/private-batch/regraded.json
+```
+
+Use the same effective task for planning and grading, including any canonical verifier overlay.
+Run the reporting command with the matching batch manifest:
+
+```bash
+uv run oracle-mutants report-patches \
+  --manifest /path/to/private-batch/manifest.json \
+  --grades /path/to/private-batch/regraded.json \
+  --out /path/to/private-batch
+```
+
+The JSON and Markdown reports join grades by candidate ID and require a complete, passing reference.
+A generated candidate that earns full reward is a lead for review. Saved regressions and valid
+alternatives have separate outcomes. The patch report returns 0 for complete evidence and 2 for
+invalid input or an inconclusive batch. Keep private bundles, patches, and reports in private storage.
+
 ## Mutation operators
 
 | Output type | Operators |

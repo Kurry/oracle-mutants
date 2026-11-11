@@ -12,6 +12,8 @@ from .compare import accepted_mutants, compare
 from .compare import to_markdown as compare_markdown
 from .operators import MEDIUM, STRONG, WEAK
 from .oracle import OracleError, load_oracle_job, run_oracle
+from .patch_plan import DEFAULT_MAX_MUTANTS, plan_patches
+from .patch_report import write_patch_report
 from .probe import probe
 from .report import summarize, write
 from .runner import Report, execute, plan
@@ -51,7 +53,29 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--cmd", dest="program", required=True, help="command that runs the submitted program (as in tests/test.sh)")
     c.add_argument("--file", required=True, help="absolute path of the file the command writes")
     c.add_argument("--max-files", type=int, default=6, help="must match the earlier run")
+    patches = sub.add_parser("plan-patches", help="generate base-relative source patches for a remote verifier")
+    patches.add_argument("task", type=Path, help="task directory containing task.toml")
+    patches.add_argument("--out", type=Path, required=True)
+    patches.add_argument("--cases", type=Path, help="JSON file declaring saved cases and optional mutation recipes")
+    patches.add_argument("--max-mutants", type=int, default=DEFAULT_MAX_MUTANTS,
+                         help=f"limit on generated candidates (default: {DEFAULT_MAX_MUTANTS})")
+    report = sub.add_parser("report-patches", help="report remote grades for a planned source-patch batch")
+    report.add_argument("--manifest", type=Path, required=True)
+    report.add_argument("--grades", type=Path, required=True)
+    report.add_argument("--out", type=Path, required=True)
     args = p.parse_args(argv)
+    if args.cmd in ("plan-patches", "report-patches"):
+        try:
+            if args.cmd == "plan-patches":
+                count = plan_patches(args.task, args.out, args.cases, args.max_mutants)
+                print(f"Wrote {count} candidates to {args.out / 'changes.json'} and {args.out / 'manifest.json'}")
+                return 0
+            status = write_patch_report(args.manifest, args.grades, args.out)
+            print(f"Report: {args.out / 'patch-report.md'}")
+            return status
+        except (OSError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
     if args.cmd == "summarize":
         print(summarize(args.runs))
         return 0

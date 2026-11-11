@@ -1,0 +1,12 @@
+{
+  "name": "oracle-mutants-stryker",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@babel/core": "7.25.9",
+    "@babel/parser": "7.25.9",
+    "@stryker-mutator/instrumenter": "8.7.1"
+  }
+}

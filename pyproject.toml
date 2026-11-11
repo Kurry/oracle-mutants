@@ -1,6 +1,6 @@
 [project]
 name = "oracle-mutants"
-version = "0.1.0"
+version = "0.2.0"
 description = "Find benchmark verifiers that accept wrong answers: mutate a task's reference outputs and re-run its verifier."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,6 +31,7 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/oracle_mutants"]
+exclude = ["**/node_modules/**"]
 
 [tool.ruff]
 line-length = 130
